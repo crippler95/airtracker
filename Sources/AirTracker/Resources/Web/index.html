@@ -7,37 +7,70 @@
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #0b0e14; color: #e6e9ef;
-    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: radial-gradient(1200px 800px at 70% -10%, #16203a 0%, #0b0e14 60%);
+    color: #e6e9ef; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   #scene { position: fixed; inset: 0; }
-  #hud { position: fixed; top: 16px; left: 16px; padding: 14px 16px;
-    background: rgba(18,22,32,.82); backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,.08); border-radius: 12px; min-width: 210px; }
-  #hud h1 { margin: 0 0 10px; font-size: 15px; letter-spacing: .3px; }
-  .row { display: flex; justify-content: space-between; gap: 18px; padding: 2px 0; }
+  .panel { position: fixed; top: 16px; left: 16px; width: 246px; padding: 16px;
+    background: rgba(18,22,32,.78); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,.09); border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+  .panel h1 { margin: 0 0 4px; font-size: 16px; letter-spacing: .2px; }
+  .sub { color: #8b93a7; font-size: 12px; margin-bottom: 12px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 3px 0; }
   .row .k { color: #8b93a7; }
   .row .v { font-variant-numeric: tabular-nums; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
-    background: #565f73; margin-right: 7px; vertical-align: middle; }
-  .dot.on { background: #34d399; box-shadow: 0 0 8px #34d399aa; }
-  button { margin-top: 12px; width: 100%; padding: 8px 12px; cursor: pointer;
-    background: #2563eb; color: #fff; border: 0; border-radius: 8px; font-size: 14px; }
-  button:hover { background: #1d4ed8; }
-  #hint { position: fixed; bottom: 14px; left: 16px; color: #6b7280; font-size: 12px; }
+    background: #565f73; margin-right: 7px; vertical-align: middle; transition: .3s; }
+  .dot.on { background: #34d399; box-shadow: 0 0 9px #34d399cc; }
+  hr { border: 0; border-top: 1px solid rgba(255,255,255,.08); margin: 12px 0; }
+  button.primary { width: 100%; padding: 10px 12px; cursor: pointer; margin-top: 2px;
+    background: linear-gradient(180deg,#3b82f6,#2563eb); color: #fff; border: 0;
+    border-radius: 10px; font-size: 14px; font-weight: 600; transition: .15s; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.primary:active { transform: translateY(1px); }
+  .field { margin-top: 10px; }
+  .field label { display: block; font-size: 12px; color: #8b93a7; margin-bottom: 6px; }
+  input[type=range] { width: 100%; accent-color: #3b82f6; }
+  .checks { display: flex; gap: 8px; margin-top: 6px; }
+  .chk { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 7px 4px; border: 1px solid rgba(255,255,255,.12); border-radius: 9px;
+    font-size: 12px; cursor: pointer; user-select: none; transition: .15s; }
+  .chk.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .chk input { display: none; }
+  .hint { position: fixed; bottom: 14px; left: 16px; color: #5b6373; font-size: 12px; }
 </style>
 </head>
 <body>
 <div id="scene"></div>
-<div id="hud">
-  <h1>AirTracker</h1>
+<div class="panel">
+  <h1>🐼 AirTracker</h1>
+  <div class="sub">Panda cam · live head tracking</div>
+
   <div class="row"><span class="k"><span id="dot" class="dot"></span>Status</span><span class="v" id="status">connecting…</span></div>
   <div class="row"><span class="k">Rate</span><span class="v"><span id="pps">0</span> Hz</span></div>
   <div class="row"><span class="k">Yaw</span><span class="v" id="yaw">0.0°</span></div>
   <div class="row"><span class="k">Pitch</span><span class="v" id="pitch">0.0°</span></div>
   <div class="row"><span class="k">Roll</span><span class="v" id="roll">0.0°</span></div>
-  <button id="recenter">Recenter</button>
+
+  <hr />
+  <button class="primary" id="recenter">Recenter</button>
+
+  <div class="field">
+    <label>Smoothing · <span id="smVal">0.18</span></label>
+    <input type="range" id="smooth" min="0" max="0.9" step="0.01" value="0.18" />
+  </div>
+
+  <div class="field">
+    <label>Invert axis</label>
+    <div class="checks">
+      <label class="chk" id="chk-yaw"><input type="checkbox" data-axis="yaw" />Yaw</label>
+      <label class="chk" id="chk-pitch"><input type="checkbox" data-axis="pitch" />Pitch</label>
+      <label class="chk" id="chk-roll"><input type="checkbox" data-axis="roll" />Roll</label>
+    </div>
+  </div>
 </div>
-<div id="hint">Green axis = up · Blue = forward (nose) · Red = right</div>
+<div class="hint">These controls mirror the menu bar · changes apply everywhere</div>
 
 <script type="importmap">
 { "imports": { "three": "/vendor/three.module.min.js" } }
@@ -45,73 +78,158 @@
 <script type="module">
 import * as THREE from "three";
 
+// ---------- scene ----------
 const mount = document.getElementById("scene");
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0e14);
 
-const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(2.4, 1.6, 3.2);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 0.35, 5.2);
 camera.lookAt(0, 0, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(devicePixelRatio);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 mount.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x223044, 1.1));
-const key = new THREE.DirectionalLight(0xffffff, 1.4);
-key.position.set(3, 5, 4);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x2a3550, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 1.5);
+key.position.set(3, 4, 5);
 scene.add(key);
+const rim = new THREE.DirectionalLight(0x88aaff, 0.7);
+rim.position.set(-4, 2, -3);
+scene.add(rim);
 
-const grid = new THREE.GridHelper(10, 20, 0x1f2937, 0x161c26);
-grid.position.y = -1.2;
-scene.add(grid);
+// ---------- materials ----------
+const M = {
+  white: new THREE.MeshStandardMaterial({ color: 0xf3f4f7, roughness: 0.85, metalness: 0.02 }),
+  black: new THREE.MeshStandardMaterial({ color: 0x1b1c22, roughness: 0.6, metalness: 0.05 }),
+  pink:  new THREE.MeshStandardMaterial({ color: 0xffb1c4, roughness: 0.7 }),
+  pod:   new THREE.MeshStandardMaterial({ color: 0xfbfbfd, roughness: 0.2, metalness: 0.15 }),
+  mesh:  new THREE.MeshStandardMaterial({ color: 0x2a2c34, roughness: 0.5 }),
+};
 
-// Head rig. Local axes: +X right, +Y up, +Z forward (nose). The incoming
-// quaternion is remapped from CoreMotion (x=right, y=forward, z=up) below.
+const sphere = (r, mat, seg = 40) => new THREE.Mesh(new THREE.SphereGeometry(r, seg, seg), mat);
+
+// ---------- panda ----------
+// Local frame: +X right, +Y up, +Z forward (face toward camera).
 const head = new THREE.Group();
+head.position.set(0.6, 0, 0);   // nudge clear of the controls panel
 scene.add(head);
 
-const skin = new THREE.MeshStandardMaterial({ color: 0x9aa7bd, roughness: 0.6, metalness: 0.05 });
-const face = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.3, 1.25), skin);
-head.add(face);
+const skull = sphere(1, M.white, 56);
+skull.scale.set(1.06, 0.99, 0.97);
+head.add(skull);
 
-const nose = new THREE.Mesh(
-  new THREE.ConeGeometry(0.22, 0.5, 24),
-  new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.4 })
-);
-nose.rotation.x = Math.PI / 2;   // point cone along +Z
-nose.position.set(0, -0.05, 0.75);
+// Ears (black, on top).
+for (const sx of [-1, 1]) {
+  const ear = sphere(0.34, M.black);
+  ear.scale.set(1, 1, 0.75);
+  ear.position.set(sx * 0.64, 0.84, -0.02);
+  head.add(ear);
+  const inner = sphere(0.2, M.mesh);
+  inner.position.set(sx * 0.64, 0.82, 0.12);
+  inner.scale.set(1, 1, 0.5);
+  head.add(inner);
+}
+
+// Eye patches (classic panda teardrops), eyes + pupils.
+for (const sx of [-1, 1]) {
+  const patch = sphere(0.3, M.black);
+  patch.scale.set(0.62, 0.92, 0.35);
+  patch.position.set(sx * 0.34, 0.1, 0.72);
+  patch.rotation.z = sx * 0.38;
+  patch.rotation.x = -0.15;
+  head.add(patch);
+
+  const eyeWhite = sphere(0.12, M.white);
+  eyeWhite.position.set(sx * 0.32, 0.12, 0.92);
+  head.add(eyeWhite);
+  const pupil = sphere(0.07, M.black);
+  pupil.position.set(sx * 0.33, 0.11, 1.0);
+  head.add(pupil);
+  const glint = sphere(0.022, M.white);
+  glint.position.set(sx * 0.30, 0.16, 1.04);
+  head.add(glint);
+}
+
+// Cheeks.
+for (const sx of [-1, 1]) {
+  const cheek = sphere(0.17, M.pink);
+  cheek.scale.set(1, 0.7, 0.4);
+  cheek.position.set(sx * 0.56, -0.26, 0.78);
+  head.add(cheek);
+}
+
+// Nose + smile.
+const nose = sphere(0.14, M.black);
+nose.scale.set(1.25, 0.85, 0.9);
+nose.position.set(0, -0.14, 0.96);
 head.add(nose);
 
-const eyeMat = new THREE.MeshStandardMaterial({ color: 0x11151d });
-for (const dx of [-0.26, 0.26]) {
-  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 20), eyeMat);
-  eye.position.set(dx, 0.18, 0.63);
-  head.add(eye);
-}
-head.add(new THREE.AxesHelper(1.1));
+const smile = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.022, 10, 24, Math.PI), M.black);
+smile.rotation.z = Math.PI;
+smile.position.set(0, -0.34, 0.9);
+head.add(smile);
 
-function onResize() {
+// AirPods tucked into the sides (where a human ear canal sits).
+function airpod(sx) {
+  const pod = new THREE.Group();
+  const bud = sphere(0.2, M.pod);
+  bud.scale.set(0.95, 1.05, 1.15);
+  pod.add(bud);
+  const speaker = sphere(0.1, M.mesh);
+  speaker.scale.set(0.6, 0.8, 0.5);
+  speaker.position.set(-sx * 0.12, 0.02, 0.06);
+  pod.add(speaker);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.52, 20), M.pod);
+  stem.position.set(0.03 * sx, -0.34, 0.08);
+  stem.rotation.z = sx * 0.18;
+  stem.rotation.x = -0.3;
+  pod.add(stem);
+  const tip = sphere(0.055, M.pod);
+  tip.position.set(0.08 * sx, -0.58, 0.18);
+  pod.add(tip);
+  pod.position.set(sx * 1.08, 0.05, 0.2);
+  pod.rotation.y = sx * 0.42;
+  pod.rotation.z = sx * -0.12;
+  return pod;
+}
+head.add(airpod(-1));
+head.add(airpod(1));
+
+// Faint ground.
+const grid = new THREE.GridHelper(14, 28, 0x1e2740, 0x141a28);
+grid.position.y = -1.7;
+scene.add(grid);
+
+// ---------- render loop ----------
+const targetQ = new THREE.Quaternion();
+const e = new THREE.Euler(0, 0, 0, "YXZ");
+const d2r = Math.PI / 180;
+
+function tick() {
+  head.quaternion.slerp(targetQ, 0.35);
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick();
+
+addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
-}
-addEventListener("resize", onResize);
+});
 
-const q = new THREE.Quaternion();
-function render() {
-  head.quaternion.slerp(q, 0.4);
-  renderer.render(scene, camera);
-  requestAnimationFrame(render);
-}
-render();
+// ---------- controls + websocket ----------
+const $ = (id) => document.getElementById(id);
+const dot = $("dot"), statusEl = $("status");
+let ws, settingsInit = false;
 
-// WebSocket link.
-const dot = document.getElementById("dot");
-const statusEl = document.getElementById("status");
-const el = (id) => document.getElementById(id);
-let ws;
+function setChk(axis, on) {
+  const box = document.querySelector(`input[data-axis="${axis}"]`);
+  box.checked = on;
+  box.closest(".chk").classList.toggle("active", on);
+}
 
 function connect() {
   ws = new WebSocket(`ws://${location.hostname}:__WS_PORT__`);
@@ -122,21 +240,50 @@ function connect() {
   };
   ws.onmessage = (ev) => {
     let d; try { d = JSON.parse(ev.data); } catch { return; }
-    const [w, x, y, z] = d.quaternion;
-    // CoreMotion (x=right, y=forward, z=up) -> three (x=right, y=up, z=forward)
-    q.set(x, z, y, w);
     const [yaw, pitch, roll] = d.yprDegrees;
-    el("yaw").textContent = yaw.toFixed(1) + "°";
-    el("pitch").textContent = pitch.toFixed(1) + "°";
-    el("roll").textContent = roll.toFixed(1) + "°";
-    el("pps").textContent = d.packetsPerSecond;
+    // Drive the head from the (already inverted) Euler so the invert toggles are visible.
+    // Signs map opentrack's convention (yaw+ left, pitch+ up, roll+ tilt-right) onto the model.
+    e.set(-pitch * d2r, yaw * d2r, -roll * d2r, "YXZ");
+    targetQ.setFromEuler(e);
+    $("yaw").textContent = yaw.toFixed(1) + "°";
+    $("pitch").textContent = pitch.toFixed(1) + "°";
+    $("roll").textContent = roll.toFixed(1) + "°";
+    $("pps").textContent = d.packetsPerSecond;
+
+    const s = d.settings;
+    if (s) {
+      setChk("yaw", s.invertYaw);
+      setChk("pitch", s.invertPitch);
+      setChk("roll", s.invertRoll);
+      if (!settingsInit && document.activeElement !== $("smooth")) {
+        $("smooth").value = s.smoothing;
+        $("smVal").textContent = (+s.smoothing).toFixed(2);
+        settingsInit = true;
+      }
+    }
   };
 }
 connect();
 
-document.getElementById("recenter").onclick = () => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ cmd: "recenter" }));
+function send(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+$("recenter").onclick = () => send({ cmd: "recenter" });
+
+$("smooth").oninput = (ev) => {
+  const v = parseFloat(ev.target.value);
+  $("smVal").textContent = v.toFixed(2);
+  send({ cmd: "setSmoothing", value: v });
 };
+
+for (const box of document.querySelectorAll('input[data-axis]')) {
+  box.addEventListener("change", (ev) => {
+    const axis = ev.target.dataset.axis;
+    ev.target.closest(".chk").classList.toggle("active", ev.target.checked);
+    send({ cmd: "setInvert", axis, value: ev.target.checked });
+  });
+}
 </script>
 </body>
 </html>

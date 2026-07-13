@@ -1,6 +1,12 @@
 import Foundation
 import simd
 
+struct AxisInversion: Equatable {
+    var yaw = false
+    var pitch = false
+    var roll = false
+}
+
 /// A processed tracking frame, ready to be serialized to any sink.
 struct TrackingFrame {
     var quaternion: simd_quatd       // relative-to-reference, smoothed
@@ -8,12 +14,8 @@ struct TrackingFrame {
     var rotationRate: SIMD3<Double>
     var userAcceleration: SIMD3<Double>
     var packetsPerSecond: Int
-}
-
-struct AxisInversion {
-    var yaw = false
-    var pitch = false
-    var roll = false
+    var smoothing: Double            // current settings, echoed to the web viewer
+    var inversion: AxisInversion
 }
 
 /// Owns recenter reference, smoothing state, axis config, and the sample-rate counter.
@@ -86,7 +88,9 @@ final class OrientationPipeline: @unchecked Sendable {
             euler: euler,
             rotationRate: sample.rotationRate,
             userAcceleration: sample.userAcceleration,
-            packetsPerSecond: sampleTimestamps.count
+            packetsPerSecond: sampleTimestamps.count,
+            smoothing: smoothing,
+            inversion: inversion
         )
         onFrame?(frame)
     }
