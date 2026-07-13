@@ -12,6 +12,11 @@ It is the AirPods counterpart to
 [sony-head-tracker](https://github.com/NicholasSlattery/sony-head-tracker): it reads the
 sensors directly on your Mac (no phone involved) and matches its output protocol.
 
+![AirTracker web viewer](assets/screenshot.png)
+
+*The built-in web viewer: a 3D head that mirrors your movement in real time, with a live
+orientation graph and every calibration control.*
+
 ## Requirements — please read this first
 
 This is not for everyone. Because of how Apple exposes the AirPods sensors, the setup is
