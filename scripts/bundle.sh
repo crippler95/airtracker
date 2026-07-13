@@ -16,10 +16,10 @@ if [ "${UNIVERSAL:-0}" = "1" ]; then
     BUILD_FLAGS+=(--arch arm64 --arch x86_64)
 fi
 
-echo "==> swift build -c $CONFIG ${BUILD_FLAGS[*]}"
-swift build -c "$CONFIG" --package-path "$ROOT" "${BUILD_FLAGS[@]}"
+echo "==> swift build -c $CONFIG ${BUILD_FLAGS[*]:-}"
+swift build -c "$CONFIG" --package-path "$ROOT" ${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"}
 
-BIN="$(swift build -c "$CONFIG" --package-path "$ROOT" "${BUILD_FLAGS[@]}" --show-bin-path)"
+BIN="$(swift build -c "$CONFIG" --package-path "$ROOT" ${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"} --show-bin-path)"
 
 echo "==> Assembling $APP"
 rm -rf "$APP"
