@@ -5,9 +5,17 @@ let package = Package(
     name: "AirTracker",
     platforms: [.macOS(.v14)],
     targets: [
+        .target(
+            name: "AirTrackerCore",
+            resources: [.copy("Resources/Web")]
+        ),
         .executableTarget(
             name: "AirTracker",
-            resources: [.copy("Resources/Web")]
-        )
+            dependencies: ["AirTrackerCore"]
+        ),
+        .testTarget(
+            name: "AirTrackerCoreTests",
+            dependencies: ["AirTrackerCore"]
+        ),
     ]
 )

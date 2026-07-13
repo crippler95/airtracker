@@ -1,7 +1,11 @@
 import Foundation
 import SwiftUI
 import CoreMotion
+import ServiceManagement
+import AppKit
+import Carbon.HIToolbox
 import os
+import AirTrackerCore
 
 let log = Logger(subsystem: "com.szilard.airtracker", category: "core")
 
@@ -9,17 +13,8 @@ let log = Logger(subsystem: "com.szilard.airtracker", category: "core")
 final class AppState: ObservableObject {
     static let shared = AppState()
 
-    // Persisted settings. Plain @Published (not @AppStorage) so didSet fires on binding
-    // writes from the menu — @AppStorage's setter bypasses didSet, which silently dropped
-    // every settings change. Persistence is handled manually in each didSet.
-    @Published var openTrackHost: String { didSet { defaults.set(openTrackHost, forKey: "openTrackHost"); applyEndpoints() } }
-    @Published var openTrackPort: Int { didSet { defaults.set(openTrackPort, forKey: "openTrackPort"); applyEndpoints() } }
-    @Published var smoothing: Double { didSet { defaults.set(smoothing, forKey: "smoothing"); pipeline.setSmoothing(smoothing) } }
-    @Published var invertYaw: Bool { didSet { defaults.set(invertYaw, forKey: "invertYaw"); applyInversion() } }
-    @Published var invertPitch: Bool { didSet { defaults.set(invertPitch, forKey: "invertPitch"); applyInversion() } }
-    @Published var invertRoll: Bool { didSet { defaults.set(invertRoll, forKey: "invertRoll"); applyInversion() } }
-
-    private let defaults = UserDefaults.standard
+    /// Single source of truth for user config; persisted and applied on every change.
+    @Published var settings: TrackerSettings { didSet { onSettingsChanged() } }
 
     // Fixed local ports.
     let jsonPort: UInt16 = 4243
@@ -30,6 +25,9 @@ final class AppState: ObservableObject {
     @Published var airPodsConnected = false
     @Published var packetsPerSecond = 0
     @Published var motionDenied = false
+    @Published var paused = false { didSet { pausedUnsafe = paused } }
+    @Published var secondsSinceSample = 0.0
+    @Published var launchAtLogin = false { didSet { applyLaunchAtLogin() } }
 
     private let motion = HeadphoneMotionSource()
     private let pipeline = OrientationPipeline()
@@ -37,38 +35,32 @@ final class AppState: ObservableObject {
     private let jsonSender: JSONUDPSender
     private let http: HTTPServer
     private let ws: WebSocketServer
-    private var hotkey: GlobalHotkey?
+    private var recenterHotkey: GlobalHotkey?
+    private var pauseHotkey: GlobalHotkey?
+    private var watchdog: Timer?
+    private var uiTimer: Timer?
 
     private var lastUIUpdate: TimeInterval = 0
     private var started = false
 
     init() {
-        let d = UserDefaults.standard
-        // Defaults reflect the AirPods body frame: pitch reads inverted vs opentrack's
-        // "up = positive", so invertPitch defaults on. The user can flip any axis live.
-        d.register(defaults: ["openTrackHost": "127.0.0.1", "openTrackPort": 4242,
-                              "smoothing": 0.18, "invertYaw": false,
-                              "invertPitch": true, "invertRoll": false])
-        let host = d.string(forKey: "openTrackHost") ?? "127.0.0.1"
-        let port = d.integer(forKey: "openTrackPort")
-
-        // Create sinks first so the settings' didSet observers have valid targets.
-        openTrackSender = OpenTrackUDPSender(host: host, port: UInt16(port))
-        jsonSender = JSONUDPSender(host: "127.0.0.1", port: jsonPort)
-        http = HTTPServer(port: httpPort, wsPort: wsPort)
-        ws = WebSocketServer(port: wsPort)
-
-        openTrackHost = host
-        openTrackPort = port
-        smoothing = d.double(forKey: "smoothing")
-        invertYaw = d.bool(forKey: "invertYaw")
-        invertPitch = d.bool(forKey: "invertPitch")
-        invertRoll = d.bool(forKey: "invertRoll")
+        let loaded = SettingsStore.load()
+        settings = loaded
+        openTrackSender = OpenTrackUDPSender(host: loaded.openTrackHost, port: UInt16(loaded.openTrackPort))
+        jsonSender = JSONUDPSender(host: "127.0.0.1", port: 4243)
+        http = HTTPServer(port: 4244, wsPort: 4245)
+        ws = WebSocketServer(port: 4245)
+        launchAtLogin = (SMAppService.mainApp.status == .enabled)
     }
 
     var motionAvailable: Bool { HeadphoneMotionSource.isAvailable }
-
     var webViewerURL: URL { URL(string: "http://localhost:\(httpPort)")! }
+    var backendName: String { "CoreMotion" }
+
+    var menuBarSymbol: String {
+        if paused { return "pause.circle" }
+        return airPodsConnected ? "airpods" : "airpods.gen3"
+    }
 
     func start() {
         guard !started else { return }
@@ -91,8 +83,10 @@ final class AppState: ObservableObject {
 
         pipeline.onFrame = { [weak self] frame in
             guard let self else { return }
-            self.openTrackSender.send(frame: frame)
-            self.jsonSender.send(frame: frame)
+            if !self.pausedUnsafe {
+                self.openTrackSender.send(frame: frame)
+                self.jsonSender.send(frame: frame)
+            }
             self.ws.broadcast(frame.webViewerData())
             self.throttledUIUpdate(frame)
         }
@@ -105,54 +99,34 @@ final class AppState: ObservableObject {
             Task { @MainActor in self.handleCommand(cmd, obj) }
         }
 
-        pipeline.setSmoothing(smoothing)
-        applyInversion()
-        applyEndpoints()
-
+        applySettings()
         openTrackSender.start()
         jsonSender.start()
         http.start()
         ws.start()
 
-        hotkey = GlobalHotkey { [weak self] in
+        recenterHotkey = GlobalHotkey { [weak self] in
             Task { @MainActor in self?.recenter() }
         }
-        hotkey?.register()
+        recenterHotkey?.register()
+        pauseHotkey = GlobalHotkey(keyCode: UInt32(kVK_ANSI_P)) { [weak self] in
+            Task { @MainActor in self?.togglePause() }
+        }
+        pauseHotkey?.register()
 
         motion.start()
-
+        startTimers()
         updateAuthState()
-        log.info("Started. motionAvailable=\(self.motionAvailable) auth=\(HeadphoneMotionSource.authorizationStatus.rawValue) invert(y/p/r)=\(self.invertYaw)/\(self.invertPitch)/\(self.invertRoll) smoothing=\(self.smoothing) opentrack=\(self.openTrackHost):\(self.openTrackPort)")
+        log.info("Started. available=\(self.motionAvailable) auth=\(HeadphoneMotionSource.authorizationStatus.rawValue) opentrack=\(self.settings.openTrackHost):\(self.settings.openTrackPort)")
     }
 
-    func recenter() {
-        pipeline.recenter()
-    }
+    // MARK: Actions
 
-    /// Commands from the web viewer. Writing the @Published settings persists them and
-    /// applies them via didSet, and keeps the menu UI in sync automatically.
-    private func handleCommand(_ cmd: String, _ obj: [String: Any]) {
-        switch cmd {
-        case "recenter":
-            recenter()
-        case "setSmoothing":
-            if let v = obj["value"] as? Double { smoothing = min(0.9, max(0, v)) }
-        case "setInvert":
-            guard let axis = obj["axis"] as? String, let v = obj["value"] as? Bool else { return }
-            switch axis {
-            case "yaw": invertYaw = v
-            case "pitch": invertPitch = v
-            case "roll": invertRoll = v
-            default: break
-            }
-        default:
-            break
-        }
-    }
+    func recenter() { pipeline.recenter() }
 
-    func openWebViewer() {
-        NSWorkspace.shared.open(webViewerURL)
-    }
+    func togglePause() { paused.toggle() }
+
+    func openWebViewer() { NSWorkspace.shared.open(webViewerURL) }
 
     func openMotionSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Motion") {
@@ -160,12 +134,132 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func applyEndpoints() {
-        openTrackSender.updateEndpoint(host: openTrackHost, port: UInt16(openTrackPort))
+    func resetCalibration() {
+        settings.axis = AxisConfig()
+        recenter()
     }
 
-    private func applyInversion() {
-        pipeline.setInversion(AxisInversion(yaw: invertYaw, pitch: invertPitch, roll: invertRoll))
+    func exportConfig() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "airtracker-config.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? SettingsStore.encode(settings).write(to: url)
+    }
+
+    func importConfig() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url,
+              let data = try? Data(contentsOf: url),
+              let loaded = SettingsStore.decode(data) else { return }
+        settings = loaded
+    }
+
+    func exportDiagnostics() {
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        let bundle: [String: Any] = [
+            "app": "AirTracker", "version": CLI.version,
+            "os": "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
+            "motionAvailable": motionAvailable,
+            "authorization": HeadphoneMotionSource.authorizationStatus.rawValue,
+            "airPodsConnected": airPodsConnected,
+            "packetsPerSecond": packetsPerSecond,
+            "settings": (try? JSONSerialization.jsonObject(with: SettingsStore.encode(settings))) ?? [:],
+        ]
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "airtracker-diagnostics.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url,
+              let data = try? JSONSerialization.data(withJSONObject: bundle, options: [.prettyPrinted, .sortedKeys]) else { return }
+        try? data.write(to: url)
+    }
+
+    // MARK: Web-viewer commands
+
+    private func handleCommand(_ cmd: String, _ obj: [String: Any]) {
+        switch cmd {
+        case "recenter": recenter()
+        case "pause": togglePause()
+        case "setSmoothing":
+            if let v = obj["value"] as? Double { settings.smoothing = min(0.9, max(0, v)) }
+        case "setInvert":
+            guard let axis = obj["axis"] as? String, let v = obj["value"] as? Bool else { return }
+            switch axis {
+            case "yaw": settings.axis.invertYaw = v
+            case "pitch": settings.axis.invertPitch = v
+            case "roll": settings.axis.invertRoll = v
+            default: break
+            }
+        case "setSource":
+            guard let axis = obj["axis"] as? String, let src = (obj["value"] as? String).flatMap(SourceAxis.init) else { return }
+            switch axis {
+            case "yaw": settings.axis.yawSource = src
+            case "pitch": settings.axis.pitchSource = src
+            case "roll": settings.axis.rollSource = src
+            default: break
+            }
+        case "setScale":
+            guard let axis = obj["axis"] as? String, let v = obj["value"] as? Double else { return }
+            switch axis {
+            case "yaw": settings.axis.scaleYaw = v
+            case "pitch": settings.axis.scalePitch = v
+            case "roll": settings.axis.scaleRoll = v
+            default: break
+            }
+        default: break
+        }
+    }
+
+    // MARK: Internals
+
+    /// Read from the pipeline callback thread; a stale read only skips/sends one frame.
+    private var pausedUnsafe = false
+
+    private func onSettingsChanged() {
+        SettingsStore.save(settings)
+        applySettings()
+    }
+
+    private func applySettings() {
+        openTrackSender.updateEndpoint(host: settings.openTrackHost, port: UInt16(settings.openTrackPort))
+        pipeline.setSmoothing(settings.smoothing)
+        pipeline.setAxisConfig(settings.axis)
+    }
+
+    private func applyLaunchAtLogin() {
+        do {
+            if launchAtLogin { try SMAppService.mainApp.register() }
+            else { try SMAppService.mainApp.unregister() }
+        } catch {
+            log.error("launch-at-login failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func startTimers() {
+        // Reconnect watchdog: if updates should be flowing but samples stalled, restart them.
+        watchdog = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkWatchdog() }
+        }
+        uiTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.updateSampleAge() }
+        }
+    }
+
+    private func checkWatchdog() {
+        guard motion.isActive, motion.lastSampleTime > 0 else { return }
+        let age = Date().timeIntervalSince1970 - motion.lastSampleTime
+        if age > 5 {
+            log.info("watchdog: samples stalled \(String(format: "%.1f", age))s, restarting motion updates")
+            motion.restart()
+        }
+    }
+
+    private func updateSampleAge() {
+        guard motion.lastSampleTime > 0 else { secondsSinceSample = 0; return }
+        secondsSinceSample = Date().timeIntervalSince1970 - motion.lastSampleTime
+        if secondsSinceSample > 1.5 { packetsPerSecond = 0 }
     }
 
     private func updateAuthState() {

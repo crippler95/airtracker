@@ -6,15 +6,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-@main
 struct AirTrackerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var state = AppState.shared
 
     var body: some Scene {
-        MenuBarExtra("AirTracker", systemImage: "airpods") {
+        MenuBarExtra {
             MenuContentView()
                 .environmentObject(state)
+        } label: {
+            Image(systemName: state.menuBarSymbol)
         }
         .menuBarExtraStyle(.window)
     }

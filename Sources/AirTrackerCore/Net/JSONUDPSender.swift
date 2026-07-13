@@ -1,8 +1,8 @@
 import Foundation
 
 /// Streams the sony-parity JSON schema, one object per sample.
-final class JSONUDPSender: UDPSender, @unchecked Sendable {
-    func send(frame: TrackingFrame) {
+public final class JSONUDPSender: UDPSender, @unchecked Sendable {
+    public func send(frame: TrackingFrame) {
         send(frame.jsonData())
     }
 }

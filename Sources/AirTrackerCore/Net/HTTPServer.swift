@@ -4,18 +4,18 @@ import Network
 /// Minimal static file server for the web viewer. Serves index.html and the
 /// vendored Three.js module from the app's resource bundle. Listens on all
 /// interfaces so a browser on another LAN machine can also open the viewer.
-final class HTTPServer: @unchecked Sendable {
+public final class HTTPServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.szilard.airtracker.http")
     private var listener: NWListener?
     private let port: UInt16
     private let wsPort: UInt16
 
-    init(port: UInt16, wsPort: UInt16) {
+    public init(port: UInt16, wsPort: UInt16) {
         self.port = port
         self.wsPort = wsPort
     }
 
-    func start() {
+    public func start() {
         queue.async {
             do {
                 let params = NWParameters.tcp

@@ -1,0 +1,50 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  html,body{margin:0;padding:0}
+  svg{display:block}
+</style></head><body>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <radialGradient id="face" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e8ebf0"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <!-- ears -->
+  <circle cx="322" cy="322" r="132" fill="#17181d"/>
+  <circle cx="702" cy="322" r="132" fill="#17181d"/>
+  <circle cx="322" cy="322" r="66" fill="#3a3d47"/>
+  <circle cx="702" cy="322" r="66" fill="#3a3d47"/>
+  <!-- head -->
+  <circle cx="512" cy="540" r="300" fill="url(#face)"/>
+  <!-- eye patches -->
+  <g fill="#17181d">
+    <ellipse cx="404" cy="512" rx="74" ry="104" transform="rotate(-18 404 512)"/>
+    <ellipse cx="620" cy="512" rx="74" ry="104" transform="rotate(18 620 512)"/>
+  </g>
+  <!-- eyes -->
+  <circle cx="410" cy="524" r="34" fill="#fff"/>
+  <circle cx="614" cy="524" r="34" fill="#fff"/>
+  <circle cx="418" cy="530" r="18" fill="#17181d"/>
+  <circle cx="606" cy="530" r="18" fill="#17181d"/>
+  <circle cx="424" cy="522" r="6" fill="#fff"/>
+  <circle cx="612" cy="522" r="6" fill="#fff"/>
+  <!-- cheeks -->
+  <ellipse cx="352" cy="648" rx="52" ry="30" fill="#ffb1c4" opacity="0.9"/>
+  <ellipse cx="672" cy="648" rx="52" ry="30" fill="#ffb1c4" opacity="0.9"/>
+  <!-- nose + smile -->
+  <ellipse cx="512" cy="612" rx="40" ry="28" fill="#17181d"/>
+  <path d="M 462 668 Q 512 716 562 668" stroke="#17181d" stroke-width="14" fill="none" stroke-linecap="round"/>
+  <!-- airpod stems -->
+  <g fill="#fbfbfd">
+    <rect x="214" y="612" width="34" height="150" rx="17" transform="rotate(16 231 687)"/>
+    <rect x="776" y="612" width="34" height="150" rx="17" transform="rotate(-16 793 687)"/>
+    <circle cx="250" cy="560" r="48"/>
+    <circle cx="774" cy="560" r="48"/>
+  </g>
+</svg>
+</body></html>

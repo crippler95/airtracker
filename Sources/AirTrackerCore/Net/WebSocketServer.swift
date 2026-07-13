@@ -4,19 +4,19 @@ import Network
 /// Broadcasts tracking frames as WebSocket text messages and receives commands
 /// (currently {"cmd":"recenter"}) from the web viewer. The WebSocket upgrade and
 /// framing are handled natively by NWProtocolWebSocket.
-final class WebSocketServer: @unchecked Sendable {
+public final class WebSocketServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.szilard.airtracker.ws")
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: NWConnection] = [:]
     private let port: UInt16
 
-    var onCommand: ((String) -> Void)?
+    public var onCommand: ((String) -> Void)?
 
-    init(port: UInt16) {
+    public init(port: UInt16) {
         self.port = port
     }
 
-    func start() {
+    public func start() {
         queue.async {
             do {
                 let params = NWParameters.tcp
@@ -65,7 +65,7 @@ final class WebSocketServer: @unchecked Sendable {
         }
     }
 
-    func broadcast(_ data: Data) {
+    public func broadcast(_ data: Data) {
         queue.async {
             guard !self.connections.isEmpty else { return }
             let meta = NWProtocolWebSocket.Metadata(opcode: .text)
