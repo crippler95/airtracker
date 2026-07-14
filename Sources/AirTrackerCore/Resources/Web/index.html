@@ -82,6 +82,21 @@
   </div>
 
   <div class="field">
+    <label>Deadzone · <span id="dzVal">0.0°</span></label>
+    <input type="range" id="deadzone" min="0" max="10" step="0.5" value="0" />
+  </div>
+
+  <div class="field">
+    <label>Expo curve · <span id="exVal">0.00</span></label>
+    <input type="range" id="expo" min="0" max="1" step="0.05" value="0" />
+  </div>
+
+  <div class="field">
+    <label>Drift compensation · <span id="drVal">off</span></label>
+    <input type="range" id="drift" min="0" max="5" step="0.1" value="0" />
+  </div>
+
+  <div class="field">
     <label>Invert axis</label>
     <div class="checks">
       <label class="chk" id="chk-yaw"><input type="checkbox" data-axis="yaw" />Yaw</label>
@@ -270,12 +285,20 @@ function connect() {
       if (!settingsInit && document.activeElement !== $("smooth")) {
         $("smooth").value = s.smoothing; $("smVal").textContent = (+s.smoothing).toFixed(2); settingsInit = true;
       }
+      mirrorSlider("deadzone", "dzVal", s.deadzone ?? 0, (v) => v.toFixed(1) + "°");
+      mirrorSlider("expo", "exVal", s.expo ?? 0, (v) => v.toFixed(2));
+      mirrorSlider("drift", "drVal", s.driftCompensation ?? 0, (v) => v > 0 ? v.toFixed(1) + "°/s" : "off");
     }
   };
 }
 connect();
 
 function send(o) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o)); }
+function mirrorSlider(id, valId, value, fmt) {
+  const el = $(id);
+  if (document.activeElement === el) return;
+  el.value = value; $(valId).textContent = fmt(+value);
+}
 function updateStatus() {
   statusEl.textContent = paused ? "paused" : "streaming";
   dot.classList.toggle("paused", paused);
@@ -285,6 +308,9 @@ $("recenter").onclick = () => send({ cmd: "recenter" });
 $("pause").onclick = () => { paused = !paused; $("pause").textContent = paused ? "Resume" : "Pause"; updateStatus(); send({ cmd: "pause" }); };
 
 $("smooth").oninput = (e) => { const v = parseFloat(e.target.value); $("smVal").textContent = v.toFixed(2); send({ cmd: "setSmoothing", value: v }); };
+$("deadzone").oninput = (e) => { const v = parseFloat(e.target.value); $("dzVal").textContent = v.toFixed(1) + "°"; send({ cmd: "setDeadzone", value: v }); };
+$("expo").oninput = (e) => { const v = parseFloat(e.target.value); $("exVal").textContent = v.toFixed(2); send({ cmd: "setExpo", value: v }); };
+$("drift").oninput = (e) => { const v = parseFloat(e.target.value); $("drVal").textContent = v > 0 ? v.toFixed(1) + "°/s" : "off"; send({ cmd: "setDrift", value: v }); };
 
 for (const box of document.querySelectorAll('input[data-axis]')) {
   box.addEventListener("change", (e) => {

@@ -95,12 +95,21 @@ struct MenuContentView: View {
 
     private var smoothingSection: some View {
         VStack(alignment: .leading, spacing: 4) {
+            sliderRow("Smoothing", value: $state.settings.smoothing, range: 0...0.9, format: "%.2f")
+            sliderRow("Deadzone", value: $state.settings.axis.deadzone, range: 0...10, format: "%.1f°")
+            sliderRow("Expo curve", value: $state.settings.axis.expo, range: 0...1, format: "%.2f")
+            sliderRow("Drift comp.", value: $state.settings.driftCompensation, range: 0...5, format: "%.1f°/s")
+        }
+    }
+
+    private func sliderRow(_ name: String, value: Binding<Double>, range: ClosedRange<Double>, format: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text("Smoothing").font(.caption).foregroundStyle(.secondary)
+                Text(name).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Text(String(format: "%.2f", state.settings.smoothing)).font(.caption).foregroundStyle(.secondary)
+                Text(String(format: format, value.wrappedValue)).font(.caption).foregroundStyle(.secondary)
             }
-            Slider(value: $state.settings.smoothing, in: 0...0.9)
+            Slider(value: value, in: range)
         }
     }
 
@@ -125,6 +134,7 @@ struct MenuContentView: View {
                 Button("Reset calibration") { state.resetCalibration() }.font(.caption)
 
                 Divider()
+                Toggle("Recenter when AirPods connect", isOn: $state.settings.recenterOnConnect).font(.caption)
                 Toggle("Launch at login", isOn: $state.launchAtLogin).font(.caption)
                 HStack {
                     Button("Import…") { state.importConfig() }

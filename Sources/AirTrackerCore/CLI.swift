@@ -4,7 +4,7 @@ import CoreMotion
 /// Headless command-line interface. The executable dispatches here when launched with a
 /// recognized subcommand; otherwise it starts the menu-bar GUI. Reuses the same core.
 public enum CLI {
-    public static let version = "1.1.0"
+    public static let version = "1.2.0"
 
     private static let commands: Set<String> = [
         "probe", "bridge", "dump", "diagnostics", "version", "--version", "-v", "help", "--help", "-h",
@@ -56,6 +56,9 @@ public enum CLI {
         if let h = opts["host"] { settings.openTrackHost = h }
         if let p = opts["port"].flatMap({ Int($0) }) { settings.openTrackPort = p }
         if let s = opts["smoothing"].flatMap({ Double($0) }) { settings.smoothing = s }
+        if let d = opts["deadzone"].flatMap({ Double($0) }) { settings.axis.deadzone = d }
+        if let e = opts["expo"].flatMap({ Double($0) }) { settings.axis.expo = e }
+        if let d = opts["drift"].flatMap({ Double($0) }) { settings.driftCompensation = d }
         let jsonPort = UInt16(opts["json-port"].flatMap { Int($0) } ?? 4243)
         let noJSON = args.contains("--no-json")
         let seconds = opts["seconds"].flatMap { Double($0) }
@@ -70,6 +73,7 @@ public enum CLI {
         let json = JSONUDPSender(host: "127.0.0.1", port: jsonPort)
         pipeline.setSmoothing(settings.smoothing)
         pipeline.setAxisConfig(settings.axis)
+        pipeline.setDriftCompensation(settings.driftCompensation)
 
         FileHandle.standardError.write(Data("AirTracker \(version) bridge → opentrack \(settings.openTrackHost):\(settings.openTrackPort)\(noJSON ? "" : ", json 127.0.0.1:\(jsonPort)")\n".utf8))
 
@@ -139,6 +143,9 @@ public enum CLI {
           --json-port <n>    JSON UDP port (default 4243)
           --no-json          Disable the JSON stream
           --smoothing <0-0.9>
+          --deadzone <deg>   Ignore head motion within ± this angle (default 0)
+          --expo <0-1>       Response curve: soften small motions (default 0 = linear)
+          --drift <deg/s>    Yaw drift compensation: pull yaw back to center (default 0)
           --seconds <n>      Run for n seconds then exit (default: until Ctrl-C)
         """)
         return 0

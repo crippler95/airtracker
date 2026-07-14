@@ -11,6 +11,7 @@ public struct TrackingFrame: Sendable {
     public var resetCounter: Int
     public var axisConfig: AxisConfig
     public var smoothing: Double
+    public var driftCompensation: Double
 }
 
 /// Owns recenter reference, smoothing state, axis config, and the sample-rate counter.
@@ -24,6 +25,12 @@ public final class OrientationPipeline: @unchecked Sendable {
     private var accelSmoothed: SIMD3<Double>?
     private var smoothing: Double = 0.18
     private var axisConfig = AxisConfig()
+
+    // Yaw drift compensation: an accumulator that chases the raw yaw at a fixed rate
+    // (deg/s), so slow sensor drift is absorbed while deliberate head turns pass through.
+    private var driftRate: Double = 0
+    private var yawDrift: Double = 0
+    private var lastSampleTime: TimeInterval?
 
     private var recenterPending = true          // recenter on first sample so output starts at identity
     private var resetCounter = 0
@@ -54,9 +61,21 @@ public final class OrientationPipeline: @unchecked Sendable {
         queue.async { self.axisConfig = value }
     }
 
+    /// Drift compensation rate in degrees/second; 0 disables it.
+    public func setDriftCompensation(_ value: Double) {
+        queue.async { self.driftRate = min(10, max(0, value)) }
+    }
+
     /// Pure transform used by both the pipeline and unit tests.
     public static func euler(from q: simd_quatd, config: AxisConfig) -> Euler {
         config.apply(to: QuaternionMath.opentrackEuler(q))
+    }
+
+    /// One drift step: move the accumulator toward the raw yaw, capped at rate·dt.
+    /// Subtracting the result from raw yaw pulls the output back to center at ≤rate °/s.
+    public static func stepDrift(_ drift: Double, towards yaw: Double, rate: Double, dt: Double) -> Double {
+        let maxStep = rate * dt
+        return drift + min(maxStep, max(-maxStep, yaw - drift))
     }
 
     private func process(_ sample: MotionSample) {
@@ -65,6 +84,7 @@ public final class OrientationPipeline: @unchecked Sendable {
             qSmoothed = nil
             gyroSmoothed = nil
             accelSmoothed = nil
+            yawDrift = 0
             recenterPending = false
         }
 
@@ -83,9 +103,17 @@ public final class OrientationPipeline: @unchecked Sendable {
         let gyro = lowpass(&gyroSmoothed, sample.rotationRate)
         let accel = lowpass(&accelSmoothed, sample.userAcceleration)
 
-        let euler = OrientationPipeline.euler(from: smoothed, config: axisConfig)
-
         let now = Date().timeIntervalSince1970
+
+        var raw = QuaternionMath.opentrackEuler(smoothed)
+        if driftRate > 0 {
+            let dt = min(max(now - (lastSampleTime ?? now), 0), 0.2)
+            yawDrift = OrientationPipeline.stepDrift(yawDrift, towards: raw.yaw, rate: driftRate, dt: dt)
+            raw.yaw -= yawDrift
+        }
+        lastSampleTime = now
+        let euler = axisConfig.apply(to: raw)
+
         sampleTimestamps.append(now)
         sampleTimestamps.removeAll { now - $0 > 1.0 }
 
@@ -97,7 +125,8 @@ public final class OrientationPipeline: @unchecked Sendable {
             packetsPerSecond: sampleTimestamps.count,
             resetCounter: resetCounter,
             axisConfig: axisConfig,
-            smoothing: smoothing
+            smoothing: smoothing,
+            driftCompensation: driftRate
         )
         onFrame?(frame)
     }

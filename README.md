@@ -72,6 +72,11 @@ is a setting (the target host) in AirTracker.
 - Built-in web viewer with a live 3D head, an orientation graph, and every control.
 - Recenter and pause from the menu, the web viewer, or global hotkeys (Ctrl+Alt+C / Ctrl+Alt+P).
 - Full axis calibration: per-axis source remap, inversion, and sensitivity scale.
+- Response shaping: deadzone (ignore tiny motion around center) and an expo curve that
+  softens small movements without limiting the range.
+- Yaw drift compensation: optionally pull yaw back to center at a slow, adjustable rate to
+  absorb the sensor drift AirPods accumulate over long sessions.
+- Auto-recenter when the AirPods reconnect, so tracking never resumes from a stale reference.
 - Streams to any target host — OpenTrack on this Mac, or a Windows PC on your LAN.
 - Command-line mode: `probe`, `bridge`, `dump`, `diagnostics` for headless or scripted use.
 - Config import/export, diagnostics export, launch-at-login, automatic reconnect.

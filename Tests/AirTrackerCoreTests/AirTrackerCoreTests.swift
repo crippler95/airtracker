@@ -62,6 +62,64 @@ final class AirTrackerCoreTests: XCTestCase {
         XCTAssertEqual(out.roll, 30)
     }
 
+    // MARK: Response shaping
+
+    func testDeadzoneRemovesSmallMotionContinuously() {
+        var c = AxisConfig()
+        c.deadzone = 2
+        XCTAssertEqual(c.shape(1.5), 0)
+        XCTAssertEqual(c.shape(-1.5), 0)
+        XCTAssertEqual(c.shape(2), 0)          // no jump at the edge
+        XCTAssertEqual(c.shape(5), 3)          // subtractive, not a cliff
+        XCTAssertEqual(c.shape(-5), -3)
+    }
+
+    func testExpoSoftensSmallAndPreserves90() {
+        var c = AxisConfig()
+        c.expo = 1.0
+        XCTAssertEqual(c.shape(90), 90, accuracy: 1e-9)     // 90° invariant
+        XCTAssertEqual(c.shape(-90), -90, accuracy: 1e-9)
+        XCTAssertEqual(c.shape(9), 0.9, accuracy: 1e-9)     // quadratic near center
+        c.expo = 0.5
+        XCTAssertEqual(c.shape(9), 4.5 + 0.45, accuracy: 1e-9)  // linear/quadratic blend
+        XCTAssertEqual(c.shape(0), 0)
+    }
+
+    func testShapingAppliesBeforeInvertAndScale() {
+        var c = AxisConfig()
+        c.invertPitch = false
+        c.deadzone = 1
+        c.scaleYaw = 2
+        c.invertYaw = true
+        let out = c.apply(to: Euler(yaw: 3, pitch: 0.5, roll: 0))
+        XCTAssertEqual(out.yaw, -4)     // (3-1) * 2, inverted
+        XCTAssertEqual(out.pitch, 0)    // inside deadzone
+    }
+
+    // MARK: Drift compensation
+
+    func testDriftStepIsCappedByRate() {
+        // Far from center: the accumulator moves at most rate·dt per step.
+        let d = OrientationPipeline.stepDrift(0, towards: 30, rate: 1.0, dt: 0.04)
+        XCTAssertEqual(d, 0.04, accuracy: 1e-12)
+    }
+
+    func testDriftConvergesToHeldYaw() {
+        // Holding 5° for long enough pulls the output (yaw - drift) back to 0.
+        var drift = 0.0
+        for _ in 0..<200 {
+            drift = OrientationPipeline.stepDrift(drift, towards: 5, rate: 1.0, dt: 0.04)
+        }
+        XCTAssertEqual(drift, 5, accuracy: 1e-9)
+    }
+
+    func testDriftFollowsSignChanges() {
+        var drift = OrientationPipeline.stepDrift(0, towards: -10, rate: 2.0, dt: 0.1)
+        XCTAssertEqual(drift, -0.2, accuracy: 1e-12)
+        drift = OrientationPipeline.stepDrift(drift, towards: drift, rate: 2.0, dt: 0.1)
+        XCTAssertEqual(drift, -0.2, accuracy: 1e-12)   // at target → no movement
+    }
+
     // MARK: opentrack packet
 
     func testOpenTrackPacketIsFortyEightLittleEndianBytes() {
@@ -87,7 +145,8 @@ final class AirTrackerCoreTests: XCTestCase {
             packetsPerSecond: 25,
             resetCounter: 4,
             axisConfig: AxisConfig(),
-            smoothing: 0.18
+            smoothing: 0.18,
+            driftCompensation: 0
         )
         let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: frame.jsonData()) as? [String: Any])
         for key in ["version", "device", "rotationVector", "quaternion", "yprDegrees",
@@ -104,12 +163,16 @@ final class AirTrackerCoreTests: XCTestCase {
             quaternion: simd_quatd(ix: 0, iy: 0, iz: 0, r: 1),
             euler: Euler(yaw: 0, pitch: 0, roll: 0),
             rotationRate: .zero, userAcceleration: .zero,
-            packetsPerSecond: 0, resetCounter: 0, axisConfig: AxisConfig(), smoothing: 0.18
+            packetsPerSecond: 0, resetCounter: 0, axisConfig: AxisConfig(), smoothing: 0.18,
+            driftCompensation: 0
         )
         let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: frame.webViewerData()) as? [String: Any])
         let settings = try XCTUnwrap(obj["settings"] as? [String: Any])
         XCTAssertEqual(settings["invertPitch"] as? Bool, true)
         XCTAssertNotNil(settings["yawSource"])
+        XCTAssertNotNil(settings["deadzone"])
+        XCTAssertNotNil(settings["expo"])
+        XCTAssertNotNil(settings["driftCompensation"])
     }
 
     // MARK: TrackerSettings round-trip
@@ -120,9 +183,30 @@ final class AirTrackerCoreTests: XCTestCase {
         s.openTrackPort = 5005
         s.axis.rollSource = .yaw
         s.axis.scalePitch = 1.7
+        s.axis.deadzone = 2.5
+        s.axis.expo = 0.4
+        s.driftCompensation = 1.5
+        s.recenterOnConnect = false
         let data = SettingsStore.encode(s)
         let back = try XCTUnwrap(SettingsStore.decode(data))
         XCTAssertEqual(s, back)
+    }
+
+    func testSettingsFromOlderVersionStillDecode() throws {
+        // A 1.1.0 config has none of the 1.2.0 keys; it must load with defaults.
+        let old = """
+        {"openTrackHost":"10.0.0.7","openTrackPort":4242,"smoothing":0.3,
+         "axis":{"yawSource":"yaw","pitchSource":"pitch","rollSource":"roll",
+                 "invertYaw":false,"invertPitch":true,"invertRoll":false,
+                 "scaleYaw":1,"scalePitch":1,"scaleRoll":1}}
+        """
+        let s = try XCTUnwrap(SettingsStore.decode(Data(old.utf8)))
+        XCTAssertEqual(s.openTrackHost, "10.0.0.7")
+        XCTAssertEqual(s.smoothing, 0.3)
+        XCTAssertEqual(s.axis.deadzone, 0)
+        XCTAssertEqual(s.axis.expo, 0)
+        XCTAssertEqual(s.driftCompensation, 0)
+        XCTAssertTrue(s.recenterOnConnect)
     }
 
     // MARK: slerp

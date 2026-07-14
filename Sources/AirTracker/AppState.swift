@@ -68,7 +68,11 @@ final class AppState: ObservableObject {
 
         motion.onConnect = { [weak self] in
             log.info("AirPods connected")
-            Task { @MainActor in self?.airPodsConnected = true }
+            Task { @MainActor in
+                guard let self else { return }
+                self.airPodsConnected = true
+                if self.settings.recenterOnConnect { self.recenter() }
+            }
         }
         motion.onDisconnect = { [weak self] in
             log.info("AirPods disconnected")
@@ -208,6 +212,12 @@ final class AppState: ObservableObject {
             case "roll": settings.axis.scaleRoll = v
             default: break
             }
+        case "setDeadzone":
+            if let v = obj["value"] as? Double { settings.axis.deadzone = min(10, max(0, v)) }
+        case "setExpo":
+            if let v = obj["value"] as? Double { settings.axis.expo = min(1, max(0, v)) }
+        case "setDrift":
+            if let v = obj["value"] as? Double { settings.driftCompensation = min(10, max(0, v)) }
         default: break
         }
     }
@@ -226,6 +236,7 @@ final class AppState: ObservableObject {
         openTrackSender.updateEndpoint(host: settings.openTrackHost, port: UInt16(settings.openTrackPort))
         pipeline.setSmoothing(settings.smoothing)
         pipeline.setAxisConfig(settings.axis)
+        pipeline.setDriftCompensation(settings.driftCompensation)
     }
 
     private func applyLaunchAtLogin() {

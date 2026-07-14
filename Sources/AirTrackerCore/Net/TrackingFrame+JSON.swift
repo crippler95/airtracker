@@ -39,6 +39,9 @@ extension TrackingFrame {
             "scaleYaw": c.scaleYaw,
             "scalePitch": c.scalePitch,
             "scaleRoll": c.scaleRoll,
+            "deadzone": c.deadzone,
+            "expo": c.expo,
+            "driftCompensation": driftCompensation,
         ]
         return (try? JSONSerialization.data(withJSONObject: obj)) ?? Data()
     }

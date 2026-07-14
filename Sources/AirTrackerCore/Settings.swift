@@ -7,7 +7,20 @@ public struct TrackerSettings: Codable, Equatable, Sendable {
     public var openTrackPort: Int = 4242
     public var smoothing: Double = 0.18
     public var axis: AxisConfig = AxisConfig()
+    public var driftCompensation: Double = 0    // deg/s pull of yaw back to center; 0 = off
+    public var recenterOnConnect: Bool = true   // recenter when AirPods (re)connect
     public init() {}
+
+    public init(from decoder: Decoder) throws {
+        // decodeIfPresent so settings and exported configs from older versions keep loading.
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        openTrackHost = try c.decodeIfPresent(String.self, forKey: .openTrackHost) ?? "127.0.0.1"
+        openTrackPort = try c.decodeIfPresent(Int.self, forKey: .openTrackPort) ?? 4242
+        smoothing = try c.decodeIfPresent(Double.self, forKey: .smoothing) ?? 0.18
+        axis = try c.decodeIfPresent(AxisConfig.self, forKey: .axis) ?? AxisConfig()
+        driftCompensation = try c.decodeIfPresent(Double.self, forKey: .driftCompensation) ?? 0
+        recenterOnConnect = try c.decodeIfPresent(Bool.self, forKey: .recenterOnConnect) ?? true
+    }
 }
 
 public enum SettingsStore {
