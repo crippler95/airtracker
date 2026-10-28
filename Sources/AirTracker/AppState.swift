@@ -28,6 +28,7 @@ final class AppState: ObservableObject {
     @Published var paused = false { didSet { pausedUnsafe = paused } }
     @Published var secondsSinceSample = 0.0
     @Published var launchAtLogin = false { didSet { applyLaunchAtLogin() } }
+    @Published var networkTrackingEnabled = false { didSet { applyNetworkTracking() } }
 
     private let motion = HeadphoneMotionSource()
     private let pipeline = OrientationPipeline()
@@ -88,7 +89,9 @@ final class AppState: ObservableObject {
         pipeline.onFrame = { [weak self] frame in
             guard let self else { return }
             if !self.pausedUnsafe {
-                self.openTrackSender.send(frame: frame)
+                if self.networkTrackingEnabled {
+                    self.openTrackSender.send(frame: frame)
+                }
                 self.jsonSender.send(frame: frame)
             }
             self.ws.broadcast(frame.webViewerData())
@@ -246,6 +249,11 @@ final class AppState: ObservableObject {
         } catch {
             log.error("launch-at-login failed: \(error.localizedDescription)")
         }
+    }
+
+    private func applyNetworkTracking() {
+        // Network tracking is handled in the pipeline callback
+        log.info("Network tracking \(self.networkTrackingEnabled ? "enabled" : "disabled")")
     }
 
     private func startTimers() {

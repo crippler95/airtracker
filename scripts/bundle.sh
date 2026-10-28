@@ -43,6 +43,6 @@ if [ -f "$ROOT/assets/AppIcon.icns" ]; then
 fi
 
 echo "==> Codesigning (ad-hoc)"
-codesign --force --sign - --identifier com.szilard.airtracker "$APP"
+codesign --force --sign - --identifier com.szilard.airtracker --entitlements "$ROOT/Support/AirTracker.entitlements" "$APP"
 
 echo "==> Done: $APP"

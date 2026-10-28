@@ -1,6 +1,9 @@
 import Foundation
 import CoreMotion
 import simd
+import os
+
+private let log = Logger(subsystem: "com.szilard.airtracker", category: "motion")
 
 /// A single motion sample forwarded from CoreMotion, decoupled from CMDeviceMotion
 /// so the rest of the pipeline never imports CoreMotion types.
@@ -44,8 +47,15 @@ public final class HeadphoneMotionSource: NSObject, CMHeadphoneMotionManagerDele
     }
 
     public func start() {
-        guard manager.isDeviceMotionAvailable, !manager.isDeviceMotionActive else { return }
-        manager.startDeviceMotionUpdates(to: queue) { [weak self] motion, _ in
+        guard manager.isDeviceMotionAvailable, !manager.isDeviceMotionActive else {
+            log.warning("Cannot start motion: available=\(self.manager.isDeviceMotionAvailable) active=\(self.manager.isDeviceMotionActive)")
+            return
+        }
+        manager.startDeviceMotionUpdates(to: queue) { [weak self] motion, error in
+            if let error {
+                log.error("Motion update error: \(error.localizedDescription)")
+                return
+            }
             guard let self, let m = motion else { return }
             let q = m.attitude.quaternion
             self.lastSampleTime = Date().timeIntervalSince1970

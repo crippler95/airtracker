@@ -186,18 +186,35 @@ public enum CLI {
     }
 
     /// Keep the process alive for CoreMotion callbacks; exit after `seconds` or on SIGINT.
-    private static func runUntil(seconds: Double?, tick: (() -> Void)? = nil) {
+    private static func runUntil(seconds: Double?, tick: (@Sendable () -> Void)? = nil) {
         signal(SIGINT) { _ in exit(0) }
         signal(SIGTERM) { _ in exit(0) }
+
+        // Use DispatchSource timers on the main queue to avoid Swift 6 main-actor inference
+        let mainQueue = DispatchQueue.main
+
+        // Retain timers so they don't get deallocated before firing
+        var timers: [DispatchSourceTimer] = []
+
         if let seconds {
-            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { exit(0) }
+            let timer = DispatchSource.makeTimerSource(queue: mainQueue)
+            timer.schedule(deadline: .now() + seconds)
+            timer.setEventHandler { exit(0) }
+            timer.resume()
+            timers.append(timer)
         }
+
         if let tick {
-            let timer = DispatchSource.makeTimerSource(queue: .main)
+            let timer = DispatchSource.makeTimerSource(queue: mainQueue)
             timer.schedule(deadline: .now() + 1, repeating: 1)
             timer.setEventHandler(handler: tick)
             timer.resume()
+            timers.append(timer)
         }
-        dispatchMain()
+
+        // Keep reference to timers to prevent deallocation
+        withExtendedLifetime(timers) {
+            dispatchMain()
+        }
     }
 }

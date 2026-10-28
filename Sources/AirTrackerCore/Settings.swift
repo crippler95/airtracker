@@ -24,7 +24,7 @@ public struct TrackerSettings: Codable, Equatable, Sendable {
 }
 
 public enum SettingsStore {
-    public static let suiteName = "com.szilard.airtracker"
+    public static let suiteName = "airtracker.settings"
     private static let key = "settings"
 
     public static var defaults: UserDefaults {

@@ -1,5 +1,6 @@
 import SwiftUI
 import AirTrackerCore
+import AppKit
 
 struct MenuContentView: View {
     @EnvironmentObject var state: AppState
@@ -13,6 +14,8 @@ struct MenuContentView: View {
                 statusRows
                 Divider()
                 targetSection
+                networkTrackingSection
+                Divider()
                 smoothingSection
                 calibrationSection
                 Divider()
@@ -90,6 +93,27 @@ struct MenuContentView: View {
             }
             Text("127.0.0.1 for OpenTrack on this Mac, or your PC's LAN IP.")
                 .font(.caption2).foregroundStyle(.secondary)
+        }
+    }
+
+    private var networkTrackingSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Network Tracking").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button(state.networkTrackingEnabled ? "Stop Network" : "Start Network") {
+                    state.networkTrackingEnabled.toggle()
+                }
+                .controlSize(.small)
+                .disabled(state.settings.openTrackHost == "127.0.0.1" || state.settings.openTrackHost.isEmpty)
+            }
+            if state.settings.openTrackHost == "127.0.0.1" || state.settings.openTrackHost.isEmpty {
+                Text("Enter a remote PC IP address to enable network tracking.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else if state.networkTrackingEnabled {
+                Text("Streaming to \(state.settings.openTrackHost):\(state.settings.openTrackPort)")
+                    .font(.caption2).foregroundStyle(.green)
+            }
         }
     }
 
@@ -176,10 +200,16 @@ struct MenuContentView: View {
             HStack {
                 Button("Open Web Viewer") { state.openWebViewer() }
                 Spacer()
+                Button("Settings") { openSettingsWindow() }
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
             .font(.caption)
         }
+    }
+
+    private func openSettingsWindow() {
+        // Call the AppDelegate's showSettingsWindow method via shared reference
+        AppDelegate.shared?.showSettingsWindow(nil)
     }
 
     private func labelRow(_ text: String, color: Color, symbol: String) -> some View {
